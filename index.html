@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ringtone Editor v1.1</title>
+    <style>
+        :root { --bg: #1a1a1a; --panel: #2a2a2a; --accent: #007aff; --text: #ffffff; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        #display-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .time-box { font-size: 3.5rem; font-weight: 200; font-variant-numeric: tabular-nums; margin-bottom: 10px; }
+        .info-text { font-size: 14px; color: #888; margin-bottom: 30px; }
+        #control-panel { background: var(--panel); padding: 20px; border-radius: 20px 20px 0 0; box-shadow: 0 -5px 15px rgba(0,0,0,0.3); }
+        .row { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+        .label { width: 60px; font-weight: bold; font-size: 12px; color: var(--accent); }
+        .btn { flex: 1; height: 50px; border-radius: 12px; border: none; background: #3a3a3a; color: white; font-size: 16px; font-weight: bold; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        .btn.active { background: var(--accent); }
+        .play-btn { width: 100%; height: 60px; background: #fff; color: #000; font-size: 20px; margin-bottom: 15px; }
+        .save-btn { width: 100%; height: 60px; background: #34c759; color: #fff; font-size: 20px; }
+        #file-in { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="display-area">
+    <button class="btn" style="width: auto; padding: 0 20px; margin-bottom: 20px;" onclick="document.getElementById('file-in').click()">🎵 曲を選択</button>
+    <div id="cur-time" class="time-box">00:00.0</div>
+    <div id="range-info" class="info-text">START: 0.0s / END: 0.0s</div>
+</div>
+
+<div id="control-panel">
+    <button class="btn play-btn" id="play-btn" onclick="togglePlay()">再生 / 停止</button>
+
+    <div class="row">
+        <div class="label">START</div>
+        <button class="btn" onclick="adj('s', -0.1)">-0.1</button>
+        <button class="btn" onclick="adj('s', 0.1)">+0.1</button>
+        <button class="btn" style="background: var(--accent);" onclick="setNow('s')">ココ！</button>
+    </div>
+
+    <div class="row">
+        <div class="label">END</div>
+        <button class="btn" onclick="adj('e', -0.1)">-0.1</button>
+        <button class="btn" onclick="adj('e', 0.1)">+0.1</button>
+        <button class="btn" style="background: var(--accent);" onclick="setNow('e')">ココ！</button>
+    </div>
+
+    <!-- フェード選択列 -->
+    <div class="row">
+        <div class="label">FADE</div>
+        <button class="btn f-btn active" onclick="setFade(0, this)">なし</button>
+        <button class="btn f-btn" onclick="setFade(2, this)">2秒</button>
+        <button class="btn f-btn" onclick="setFade(5, this)">5秒</button>
+    </div>
+
+    <button class="btn save-btn" onclick="exportAudio()">IGNITION (保存)</button>
+</div>
+
+<input type="file" id="file-in" accept="audio/*">
+
+<script>
+    let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let audioBuffer, sourceNode;
+    let startTime = 0, endTime = 0, fadeSec = 0, isPlaying = false;
+    let playbackStartTime = 0, startOffset = 0;
+
+    document.getElementById('file-in').onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const arrayBuffer = await file.arrayBuffer();
+        audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        endTime = Math.min(audioBuffer.duration, 30);
+        updateDisplay();
+    };
+
+    function updateDisplay() {
+        document.getElementById('range-info').innerText = `START: ${startTime.toFixed(1)}s / END: ${endTime.toFixed(1)}s / FADE: ${fadeSec}s`;
+        if(!isPlaying) document.getElementById('cur-time').innerText = formatTime(startTime);
+    }
+
+    function formatTime(sec) {
+        let m = Math.floor(sec / 60);
+        let s = (sec % 60).toFixed(1);
+        return `${m.toString().padStart(2, '0')}:${s.padStart(4, '0')}`;
+    }
+
+    function adj(type, val) {
+        if (type === 's') startTime = Math.max(0, startTime + val);
+        else endTime = Math.min(audioBuffer.duration, endTime + val);
+        updateDisplay();
+    }
+
+    function setNow(type) {
+        if (!isPlaying) return;
+        let now = audioCtx.currentTime - playbackStartTime + startOffset;
+        if (type === 's') startTime = now; else endTime = now;
+        updateDisplay();
+    }
+
+    function setFade(sec, el) {
+        fadeSec = sec;
+        document.querySelectorAll('.f-btn').forEach(b => b.classList.remove('active'));
+        el.classList.add('active');
+        updateDisplay();
+    }
+
+    function togglePlay() {
+        if (isPlaying) {
+            sourceNode.stop();
+            isPlaying = false;
+        } else {
+            if (!audioBuffer) return;
+            sourceNode = audioCtx.createBufferSource();
+            sourceNode.buffer = audioBuffer;
+            sourceNode.connect(audioCtx.destination);
+            startOffset = startTime;
+            playbackStartTime = audioCtx.currentTime;
+            sourceNode.start(0, startTime, endTime - startTime);
+            isPlaying = true;
+            const tick = () => {
+                if (!isPlaying) return;
+                let now = audioCtx.currentTime - playbackStartTime + startOffset;
+                document.getElementById('cur-time').innerText = formatTime(now);
+                requestAnimationFrame(tick);
+            };
+            tick();
+            sourceNode.onended = () => isPlaying = false;
+        }
+    }
+
+    async function exportAudio() {
+        if (!audioBuffer) return;
+        const duration = endTime - startTime;
+        const sampleRate = audioBuffer.sampleRate;
+        const frameCount = duration * sampleRate;
+        
+        // オフラインコンテキストでフェードを適用しながらレンダリング
+        const offlineCtx = new OfflineAudioContext(audioBuffer.numberOfChannels, frameCount, sampleRate);
+        const source = offlineCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        
+        const gainNode = offlineCtx.createGain();
+        gainNode.gain.setValueAtTime(1.0, 0);
+        if (fadeSec > 0) {
+            const fadeStart = Math.max(0, duration - fadeSec);
+            gainNode.gain.setValueAtTime(1.0, fadeStart);
+            gainNode.gain.linearRampToValueAtTime(0, duration);
+        }
+
+        source.connect(gainNode);
+        gainNode.connect(offlineCtx.destination);
+        source.start(0, startTime, duration);
+
+        const renderedBuffer = await offlineCtx.startRendering();
+        const wavData = bufferToWav(renderedBuffer);
+        const blob = new Blob([wavData], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "ringtone_faded.wav";
+        a.click();
+    }
+
+    function bufferToWav(abuffer) {
+        let numOfChan = abuffer.numberOfChannels, length = abuffer.length * numOfChan * 2 + 44, buffer = new ArrayBuffer(length), view = new DataView(buffer), channels = [], i, sample, offset = 0, pos = 0;
+        const setUint16 = (data) => { view.setUint16(pos, data, true); pos += 2; };
+        const setUint32 = (data) => { view.setUint32(pos, data, true); pos += 4; };
+        setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157);
+        setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan);
+        setUint32(abuffer.sampleRate); setUint32(abuffer.sampleRate * 2 * numOfChan);
+        setUint16(numOfChan * 2); setUint16(16); setUint32(0x61746164); setUint32(length - pos - 4);
+        for(i=0; i<abuffer.numberOfChannels; i++) channels.push(abuffer.getChannelData(i));
+        while(pos < length) {
+            for(i=0; i<numOfChan; i++) {
+                sample = Math.max(-1, Math.min(1, channels[i][offset]));
+                sample = (sample < 0 ? sample * 0x8000 : sample * 0x7FFF);
+                view.setInt16(pos, sample, true); pos += 2;
+            }
+            offset++;
+        }
+        return buffer;
+    }
+</script>
+</body>
+</html>
