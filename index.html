@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.5.2</title>
+<title>Ringtone Ignition v1.5.3</title>
 <style>
   body { background:#121212; color:#eee; font-family:monospace; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; touch-action:none; }
   .panel { background:#1e1e1e; border:2px solid #333; padding:15px; border-radius:12px; width:90%; text-align:center; box-sizing:border-box; }
+  /* 経過時間は常にシアン固定 */
   .time { font-size:2.2rem; color:#0ff; font-weight:bold; margin-bottom:5px; text-shadow:0 0 10px #0ff; }
-  .time.warn { color:#ff4444; text-shadow:0 0 10px #ff4444; }
   .info-area { margin-bottom:15px; min-height:3em; display:flex; flex-direction:column; justify-content:center; }
   .range-info { font-size:0.85rem; color:#f0f; font-weight:bold; }
   .alert-info { font-size:0.75rem; color:#ff4444; font-weight:bold; margin-top:4px; height:1.2em; }
@@ -92,9 +92,7 @@
       } else { monoData.set(decoded.getChannelData(0)); }
       aBuf = monoBuf;
       sk.max = aBuf.duration;
-      sT = 0;
-      eT = aBuf.duration; 
-      offset = 0;
+      sT = 0; eT = aBuf.duration; offset = 0;
       updateInfo();
     } catch (err) { document.getElementById('range-val').innerText = "ERROR: LOAD FAILED"; }
   };
@@ -141,20 +139,15 @@
     const editLen = eT - sT;
     const rangeVal = document.getElementById('range-val');
     const alertMsg = document.getElementById('alert-msg');
-    const timeBox = document.getElementById('tm');
     const ignition = document.getElementById('ig');
 
-    // スタートとエンドの秒数は常に表示
     rangeVal.innerText = "IN: " + sT.toFixed(2) + "s / OUT: " + eT.toFixed(2) + "s (" + editLen.toFixed(2) + "s)";
     
-    // 警告は別行に表示
     if (editLen > 40) {
       alertMsg.innerText = "⚠️ TOO LONG (MAX 40s)";
-      timeBox.classList.add('warn');
       ignition.disabled = true;
     } else {
       alertMsg.innerText = "";
-      timeBox.classList.remove('warn');
       ignition.disabled = false;
     }
     updateTimeDisplay(isP ? aCtx.currentTime - pStart + offset : offset); 
