@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.4.6</title>
+<title>Ringtone Ignition v1.4.7</title>
 <style>
   body { background:#121212; color:#eee; font-family:monospace; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; touch-action:none; }
   .panel { background:#1e1e1e; border:2px solid #333; padding:15px; border-radius:12px; width:90%; text-align:center; box-sizing:border-box; }
@@ -57,8 +57,10 @@
 
   function unlockAudio() { if (aCtx.state === 'suspended') aCtx.resume(); }
 
+  // 停止時に「現在の再生秒数」をoffsetに保存する
   function stopAudio() {
     if (sNode) {
+      if (isP) offset = aCtx.currentTime - pStart + offset;
       try { sNode.stop(); } catch(e){}
       sNode.disconnect();
       sNode = null;
@@ -73,8 +75,6 @@
     try {
       const arrayBuffer = await file.arrayBuffer();
       const decoded = await aCtx.decodeAudioData(arrayBuffer);
-      
-      // ここでモノラル化してメモリを半分にする（内部処理）
       const monoBuf = aCtx.createBuffer(1, decoded.length, decoded.sampleRate);
       const monoData = monoBuf.getChannelData(0);
       if (decoded.numberOfChannels > 1) {
@@ -84,7 +84,6 @@
       } else {
         monoData.set(decoded.getChannelData(0));
       }
-      
       aBuf = monoBuf;
       sk.max = aBuf.duration;
       eT = aBuf.duration;
@@ -99,31 +98,43 @@
     if (isP) { 
       stopAudio(); 
     } else {
-      stopAudio();
+      // 再生開始前にゴミを掃除（offsetは保存せず純粋に止める）
+      if (sNode) { sNode.disconnect(); sNode = null; }
+      
       sNode = aCtx.createBufferSource();
       sNode.buffer = aBuf;
       sNode.connect(aCtx.destination);
+      
+      // 再開位置のバリデーション
       if (offset >= eT || offset < 0) offset = sT;
+      
       pStart = aCtx.currentTime;
       sNode.start(0, offset, Math.max(0, eT - offset));
       isP = true;
+      
       const tick = () => {
         if (!isP) return;
         let now = aCtx.currentTime - pStart + offset;
         updateTimeDisplay(now);
-        if (now >= eT) { stopAudio(); offset = sT; updateTimeDisplay(sT); } else { requestAnimationFrame(tick); }
+        if (now >= eT) { 
+          isP = false; // offset保存を防ぐためフラグを先に折る
+          stopAudio(); 
+          offset = sT; 
+          updateTimeDisplay(sT); 
+        } else { 
+          requestAnimationFrame(tick); 
+        }
       };
       tick();
-      sNode.onended = () => { isP = false; };
+      sNode.onended = () => { if(isP) isP = false; };
     }
   }
 
   function manualSeek(v) {
-    let wasP = isP;
     stopAudio();
     offset = parseFloat(v);
     updateTimeDisplay(offset);
-    if (wasP) pp();
+    // スライダーを離したときなどの挙動を安定させるため自動再生はさせない
   }
 
   function skip(v) { 
@@ -135,6 +146,7 @@
   }
 
   function adj(t, v) { if(t == 's') sT = Math.max(0, sT + v); else eT = Math.min(aBuf.duration, eT + v); updateInfo(); }
+  
   function st(t) { 
     let now = isP ? aCtx.currentTime - pStart + offset : offset; 
     if(t=='s') sT = now; else eT = now; 
@@ -145,7 +157,6 @@
     stopAudio(); 
     offset = sT; 
     updateTimeDisplay(sT); 
-    // ここは一時停止（鳴らさない）を維持
   }
 
   function previewEnd() { 
