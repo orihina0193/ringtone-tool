@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.4.3</title>
+<title>Ringtone Ignition v1.4.5</title>
 <style>
   body { background:#121212; color:#eee; font-family:monospace; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; touch-action:none; }
   .panel { background:#1e1e1e; border:2px solid #333; padding:15px; border-radius:12px; width:90%; text-align:center; box-sizing:border-box; }
@@ -23,7 +23,7 @@
 </head>
 <body onclick="unlockAudio()">
   <div class="panel">
-    <button onclick="unlockAudio(); document.getElementById('file-in').click()" style="width:100%; margin-bottom:10px; height:44px; background:#444; color:#0ff; border:1px solid #0ff; font-size:14px;">🎵 SELECT MUSIC</button>
+    <button onclick="unlockAudio(); document.getElementById('file-in').click()" style="width:100%; margin-bottom:10px; height:44px; background:#444; color:#0ff; border:1px solid #0ff; font-size:14px;">🎵 SELECT MUSIC (MONO)</button>
     <div id="tm" class="time">00:00.00</div>
     <div id="rf" class="info">READY</div>
     <input type="range" id="sk" value="0" step="0.01" oninput="manualSeek(this.value)">
@@ -50,7 +50,9 @@
   <input type="file" id="file-in" accept=".mp3,.m4a,.wav,.aac,audio/*">
 
 <script>
-  let aCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const TARGET_RATE = 32000;
+  // 出力チャンネル数を 1 (モノラル) に設定
+  let aCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: TARGET_RATE });
   let aBuf, sNode;
   let sT = 0, eT = 0, fade = 0, isP = false, pStart = 0, offset = 0;
   const sk = document.getElementById('sk');
@@ -69,10 +71,25 @@
   document.getElementById('file-in').onchange = async (e) => {
     const file = e.target.files[0];
     if(!file) return;
-    document.getElementById('rf').innerText = "DECODING...";
+    document.getElementById('rf').innerText = "DECODING (MONO)...";
     try {
       const arrayBuffer = await file.arrayBuffer();
-      aBuf = await aCtx.decodeAudioData(arrayBuffer);
+      const decoded = await aCtx.decodeAudioData(arrayBuffer);
+      
+      // モノラル化してメモリ節約
+      aBuf = aCtx.createBuffer(1, decoded.length, TARGET_RATE);
+      const monoData = aBuf.getChannelData(0);
+      
+      if (decoded.numberOfChannels > 1) {
+        const left = decoded.getChannelData(0);
+        const right = decoded.getChannelData(1);
+        for (let i = 0; i < decoded.length; i++) {
+          monoData[i] = (left[i] + right[i]) / 2;
+        }
+      } else {
+        monoData.set(decoded.getChannelData(0));
+      }
+      
       sk.max = aBuf.duration;
       eT = aBuf.duration;
       offset = 0;
@@ -83,9 +100,7 @@
   function pp() {
     if (!aBuf) return;
     unlockAudio();
-    if (isP) { 
-      stopAudio(); 
-    } else {
+    if (isP) { stopAudio(); } else {
       stopAudio();
       sNode = aCtx.createBufferSource();
       sNode.buffer = aBuf;
@@ -101,69 +116,25 @@
         if (now >= eT) { stopAudio(); offset = sT; updateTimeDisplay(sT); } else { requestAnimationFrame(tick); }
       };
       tick();
-      sNode.onended = () => { isP = false; };
     }
   }
 
-  function manualSeek(v) {
-    let wasP = isP;
-    stopAudio();
-    offset = parseFloat(v);
-    updateTimeDisplay(offset);
-    if (wasP) pp();
-  }
-
-  function skip(v) { 
-    let wasP = isP;
-    stopAudio();
-    offset = Math.min(aBuf.duration, Math.max(0, offset + v)); 
-    updateTimeDisplay(offset);
-    if (wasP) pp();
-  }
-
+  function manualSeek(v) { let wasP = isP; stopAudio(); offset = parseFloat(v); updateTimeDisplay(offset); if (wasP) pp(); }
+  function skip(v) { let wasP = isP; stopAudio(); offset = Math.min(aBuf.duration, Math.max(0, offset + v)); updateTimeDisplay(offset); if (wasP) pp(); }
   function adj(t, v) { if(t == 's') sT = Math.max(0, sT + v); else eT = Math.min(aBuf.duration, eT + v); updateInfo(); }
-  
-  function st(t) { 
-    let now = isP ? aCtx.currentTime - pStart + offset : offset; 
-    if(t=='s') sT = now; else eT = now; 
-    updateInfo(); 
-  }
-
-  function backToStart() { 
-    stopAudio(); // 再生を止める
-    offset = sT; // 開始位置にシーク
-    updateTimeDisplay(sT); // 表示を更新
-    // pp(); は実行しない（一時停止のままにする）
-  }
-
-  function previewEnd() { 
-    stopAudio(); 
-    offset = Math.max(sT, eT - 3); 
-    pp(); 
-  }
-  
-  function setFade(v) { 
-    fade = v; 
-    document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active')); 
-    document.getElementById('f'+v).classList.add('active'); 
-  }
-
-  function updateInfo() { 
-    document.getElementById('rf').innerText = sT.toFixed(2) + " , " + eT.toFixed(2); 
-    updateTimeDisplay(isP ? aCtx.currentTime - pStart + offset : offset); 
-  }
-
-  function updateTimeDisplay(t) { 
-    let m = Math.floor(t/60), s = (t%60).toFixed(2); 
-    document.getElementById('tm').innerText = m+":"+s.padStart(5,'0'); 
-    sk.value = t; 
-  }
+  function st(t) { let now = isP ? aCtx.currentTime - pStart + offset : offset; if(t=='s') sT = now; else eT = now; updateInfo(); }
+  function backToStart() { stopAudio(); offset = sT; updateTimeDisplay(sT); }
+  function previewEnd() { stopAudio(); offset = Math.max(sT, eT - 3); pp(); }
+  function setFade(v) { fade = v; document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active')); document.getElementById('f'+v).classList.add('active'); }
+  function updateInfo() { document.getElementById('rf').innerText = sT.toFixed(2) + " , " + eT.toFixed(2); updateTimeDisplay(isP ? aCtx.currentTime - pStart + offset : offset); }
+  function updateTimeDisplay(t) { let m = Math.floor(t/60), s = (t%60).toFixed(2); document.getElementById('tm').innerText = m+":"+s.padStart(5,'0'); sk.value = t; }
 
   async function exportAudio() {
     if (!aBuf) return;
     const dur = eT - sT;
     const sRate = aBuf.sampleRate;
-    const oCtx = new OfflineAudioContext(aBuf.numberOfChannels, Math.floor(dur * sRate), sRate);
+    // 出力も 1 (モノラル)
+    const oCtx = new OfflineAudioContext(1, Math.floor(dur * sRate), sRate);
     const src = oCtx.createBufferSource(); src.buffer = aBuf;
     const gain = oCtx.createGain();
     gain.gain.setValueAtTime(1, 0);
@@ -172,15 +143,16 @@
     src.start(0, sT, dur);
     const rendered = await oCtx.startRendering();
     const wav = bufferToWav(rendered);
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([wav], {type:'audio/wav'})); a.download = "ringtone.wav"; a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([wav], {type:'audio/wav'})); a.download = "ringtone_mono.wav"; a.click();
   }
 
   function bufferToWav(ab) {
-    let n = ab.numberOfChannels, len = ab.length * n * 2 + 44, buf = new ArrayBuffer(len), view = new DataView(buf), pos = 0;
+    let n = 1, len = ab.length * 2 + 44, buf = new ArrayBuffer(len), view = new DataView(buf), pos = 0;
     const set16 = (d) => { view.setUint16(pos, d, true); pos += 2; }, set32 = (d) => { view.setUint32(pos, d, true); pos += 4; };
     set32(0x46464952); set32(len - 8); set32(0x45564157); set32(0x20746d66); set32(16); set16(1); set16(n);
     set32(ab.sampleRate); set32(ab.sampleRate * 2 * n); set16(n * 2); set16(16); set32(0x61746164); set32(len - pos - 4);
-    for(let i=0; i<ab.length; i++) for(let c=0; c<n; c++) { let s = Math.max(-1, Math.min(1, ab.getChannelData(c)[i])); set16(s < 0 ? s * 0x8000 : s * 0x7FFF); }
+    const data = ab.getChannelData(0);
+    for(let i=0; i<ab.length; i++) { let s = Math.max(-1, Math.min(1, data[i])); set16(s < 0 ? s * 0x8000 : s * 0x7FFF); }
     return buf;
   }
 </script>
