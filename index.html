@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.4.2</title>
+<title>Ringtone Ignition v1.4.3</title>
 <style>
   body { background:#121212; color:#eee; font-family:monospace; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; touch-action:none; }
   .panel { background:#1e1e1e; border:2px solid #333; padding:15px; border-radius:12px; width:90%; text-align:center; box-sizing:border-box; }
@@ -57,7 +57,6 @@
 
   function unlockAudio() { if (aCtx.state === 'suspended') aCtx.resume(); }
 
-  // 完全に音を止める関数
   function stopAudio() {
     if (sNode) {
       try { sNode.stop(); } catch(e){}
@@ -87,7 +86,7 @@
     if (isP) { 
       stopAudio(); 
     } else {
-      stopAudio(); // 念のため、開始前に掃除
+      stopAudio();
       sNode = aCtx.createBufferSource();
       sNode.buffer = aBuf;
       sNode.connect(aCtx.destination);
@@ -131,10 +130,10 @@
   }
 
   function backToStart() { 
-    stopAudio(); 
-    offset = sT; 
-    updateTimeDisplay(sT); 
-    pp(); // 自動で再生開始
+    stopAudio(); // 再生を止める
+    offset = sT; // 開始位置にシーク
+    updateTimeDisplay(sT); // 表示を更新
+    // pp(); は実行しない（一時停止のままにする）
   }
 
   function previewEnd() { 
