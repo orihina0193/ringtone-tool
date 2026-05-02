@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.4.9</title>
+<title>Ringtone Ignition v1.5.0</title>
 <style>
   body { background:#121212; color:#eee; font-family:monospace; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; touch-action:none; }
   .panel { background:#1e1e1e; border:2px solid #333; padding:15px; border-radius:12px; width:90%; text-align:center; box-sizing:border-box; }
   .time { font-size:2.2rem; color:#0ff; font-weight:bold; margin-bottom:5px; text-shadow:0 0 10px #0ff; }
-  /* 警告時の色 */
-  .time.error { color:#ff4444; text-shadow:0 0 10px #ff4444; }
+  /* 40秒超え警告色 */
+  .time.warn { color:#ff4444; text-shadow:0 0 10px #ff4444; }
   .info { font-size:0.75rem; color:#f0f; margin-bottom:15px; min-height:1.2em; font-weight:bold; }
-  .info.error { color:#ff4444; }
+  .info.warn { color:#ff4444; }
   input[type=range] { width:100%; margin:15px 0; accent-color:#0ff; }
   .btns { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
   button { background:#333; color:#fff; border:1px solid #555; padding:10px; border-radius:8px; font-weight:bold; flex:1 1 22%; font-size:10px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
@@ -19,8 +19,8 @@
   .accent-out { background:#224444; color:#0ff; border-color:#0ff; }
   .large-btn { flex:1 1 95%; font-size:14px; height:44px; margin-bottom:2px; }
   .main { background:#006666; color:#fff; border-color:#0ff; flex:1 1 95%; font-size:16px; margin-top:10px; height:50px; }
-  /* 無効化されたボタンのスタイル */
-  .main:disabled { background:#222; color:#555; border-color:#333; cursor:not-allowed; }
+  /* 警告時にボタンを無効化 */
+  .main:disabled { background:#222; color:#555; border-color:#444; cursor:not-allowed; }
   .f-btn { background:#333; border:1px solid #555; color:#888; flex: 1 1 30%; }
   .f-btn.active { background:#555; color:#fff; border-color:#fff; }
   #file-in { display:none; }
@@ -59,9 +59,6 @@
   let aBuf, sNode, gNode;
   let sT = 0, eT = 0, fade = 0, isP = false, pStart = 0, offset = 0;
   const sk = document.getElementById('sk');
-  const timeDisp = document.getElementById('tm');
-  const infoDisp = document.getElementById('rf');
-  const igBtn = document.getElementById('ig');
 
   function unlockAudio() { if (aCtx.state === 'suspended') aCtx.resume(); }
 
@@ -80,7 +77,7 @@
   document.getElementById('file-in').onchange = async (e) => {
     const file = e.target.files[0];
     if(!file) return;
-    infoDisp.innerText = "DECODING...";
+    document.getElementById('rf').innerText = "DECODING...";
     try {
       const arrayBuffer = await file.arrayBuffer();
       const decoded = await aCtx.decodeAudioData(arrayBuffer);
@@ -90,41 +87,57 @@
         const left = decoded.getChannelData(0);
         const right = decoded.getChannelData(1);
         for (let i = 0; i < decoded.length; i++) monoData[i] = (left[i] + right[i]) / 2;
-      } else { monoData.set(decoded.getChannelData(0)); }
+      } else {
+        monoData.set(decoded.getChannelData(0));
+      }
       aBuf = monoBuf;
       sk.max = aBuf.duration;
-      eT = Math.min(aBuf.duration, 39.9); // 初期値を40秒以内に
+      // 初期値は曲の頭から30秒（安牌）に設定
+      sT = 0;
+      eT = Math.min(aBuf.duration, 30);
       offset = 0;
       updateInfo();
-    } catch (err) { infoDisp.innerText = "ERROR: LOAD FAILED"; }
+    } catch (err) { document.getElementById('rf').innerText = "ERROR: LOAD FAILED"; }
   };
 
   function pp() {
     if (!aBuf) return;
     unlockAudio();
-    if (isP) { stopAudio(); } else {
+    if (isP) { 
+      stopAudio(); 
+    } else {
       if (sNode) { sNode.disconnect(); sNode = null; }
       sNode = aCtx.createBufferSource();
       sNode.buffer = aBuf;
       gNode = aCtx.createGain();
       sNode.connect(gNode);
       gNode.connect(aCtx.destination);
+      
       if (offset >= eT || offset < 0) offset = sT;
       pStart = aCtx.currentTime;
       const remainingTime = eT - offset;
+      
       if (fade > 0 && remainingTime > 0) {
         const fadeStartTime = Math.max(0, remainingTime - fade);
         gNode.gain.setValueAtTime(1, pStart);
         gNode.gain.setValueAtTime(1, pStart + fadeStartTime);
         gNode.gain.linearRampToValueAtTime(0, pStart + remainingTime);
       }
+      
       sNode.start(0, offset, Math.max(0, remainingTime));
       isP = true;
       const tick = () => {
         if (!isP) return;
         let now = aCtx.currentTime - pStart + offset;
         updateTimeDisplay(now);
-        if (now >= eT) { isP = false; stopAudio(); offset = sT; updateTimeDisplay(sT); } else { requestAnimationFrame(tick); }
+        if (now >= eT) { 
+          isP = false;
+          stopAudio(); 
+          offset = sT; 
+          updateTimeDisplay(sT); 
+        } else { 
+          requestAnimationFrame(tick); 
+        }
       };
       tick();
     }
@@ -133,30 +146,56 @@
   function manualSeek(v) { stopAudio(); offset = parseFloat(v); updateTimeDisplay(offset); }
   function skip(v) { let wasP = isP; stopAudio(); offset = Math.min(aBuf.duration, Math.max(0, offset + v)); updateTimeDisplay(offset); if (wasP) pp(); }
   function adj(t, v) { if(t == 's') sT = Math.max(0, sT + v); else eT = Math.min(aBuf.duration, eT + v); updateInfo(); }
-  function st(t) { let now = isP ? aCtx.currentTime - pStart + offset : offset; if(t=='s') sT = now; else eT = now; updateInfo(); }
+  function st(t) { 
+    let now = isP ? aCtx.currentTime - pStart + offset : offset; 
+    if(t=='s') sT = now; else eT = now; 
+    updateInfo(); 
+  }
+
   function backToStart() { stopAudio(); offset = sT; updateTimeDisplay(sT); }
   function previewEnd() { stopAudio(); offset = Math.max(sT, eT - 3); pp(); }
-  function setFade(v) { fade = v; document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active')); document.getElementById('f'+v).classList.add('active'); if (isP) { let c = aCtx.currentTime - pStart + offset; stopAudio(); offset = c; pp(); } }
-
-  // 40秒チェック機能
-  function updateInfo() { 
-    const diff = eT - sT;
-    infoDisp.innerText = sT.toFixed(2) + " ～ " + eT.toFixed(2) + " (" + diff.toFixed(2) + "s)";
-    
-    if (diff > 40) {
-      timeDisp.classList.add('error');
-      infoDisp.classList.add('error');
-      igBtn.disabled = true;
-      infoDisp.innerText = "OVER 40s! (" + diff.toFixed(2) + "s)";
-    } else {
-      timeDisp.classList.remove('error');
-      infoDisp.classList.remove('error');
-      igBtn.disabled = false;
+  
+  function setFade(v) { 
+    fade = v; 
+    document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active')); 
+    document.getElementById('f'+v).classList.add('active'); 
+    if (isP) {
+      let currentPos = aCtx.currentTime - pStart + offset;
+      stopAudio();
+      offset = currentPos;
+      pp();
     }
+  }
+
+  // 編集後の長さを計算して警告を出す
+  function updateInfo() { 
+    const editLen = eT - sT;
+    const info = document.getElementById('rf');
+    const timeBox = document.getElementById('tm');
+    const ignition = document.getElementById('ig');
+
+    info.innerText = sT.toFixed(2) + "s ～ " + eT.toFixed(2) + "s (Length: " + editLen.toFixed(2) + "s)";
+    
+    // 40秒を超えたら警告
+    if (editLen > 40) {
+      info.classList.add('warn');
+      timeBox.classList.add('warn');
+      info.innerText = "⚠️ TOO LONG: " + editLen.toFixed(2) + "s (MAX 40s)";
+      ignition.disabled = true;
+    } else {
+      info.classList.remove('warn');
+      timeBox.classList.remove('warn');
+      ignition.disabled = false;
+    }
+    
     updateTimeDisplay(isP ? aCtx.currentTime - pStart + offset : offset); 
   }
 
-  function updateTimeDisplay(t) { let m = Math.floor(t/60), s = (t%60).toFixed(2); timeDisp.innerText = m+":"+s.padStart(5,'0'); sk.value = t; }
+  function updateTimeDisplay(t) { 
+    let m = Math.floor(t/60), s = (t%60).toFixed(2); 
+    document.getElementById('tm').innerText = m+":"+s.padStart(5,'0'); 
+    sk.value = t; 
+  }
 
   async function exportAudio() {
     if (!aBuf) return;
