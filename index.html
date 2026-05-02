@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.3</title>
+<title>Ringtone Ignition v1.4</title>
 <style>
   body { background:#121212; color:#eee; font-family:monospace; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; touch-action:none; }
   .panel { background:#1e1e1e; border:2px solid #333; padding:15px; border-radius:12px; width:90%; text-align:center; box-sizing:border-box; }
@@ -21,14 +21,13 @@
   #file-in { display:none; }
 </style>
 </head>
-<body>
+<body onclick="unlockAudio()">
   <div class="panel">
-    <!-- UI最上部にファイル選択ボタンを配置 -->
     <button onclick="document.getElementById('file-in').click()" style="width:100%; margin-bottom:10px; height:44px; background:#444; color:#0ff; border:1px solid #0ff; font-size:14px;">🎵 SELECT MUSIC (mp3/m4a)</button>
     
     <div id="tm" class="time">00:00.00</div>
-    <div id="rf" class="info">READY TO IGNITION</div>
-    <input type="range" id="sk" value="0" step="0.01">
+    <div id="rf" class="info">TAP ANYWHERE TO START</div>
+    <input type="range" id="sk" value="0" step="0.01" oninput="manualSeek(this.value)">
     
     <div class="btns">
       <button onclick="skip(-1)">-1s</button>
@@ -55,8 +54,7 @@
     </div>
   </div>
 
-  <!-- iOSでファイルアプリから音声を選びやすくするための重要設定 -->
-  <input type="file" id="file-in" accept=".mp3,.m4a,.wav,.aac,audio/mpeg,audio/mp4,audio/*">
+  <input type="file" id="file-in" accept=".mp3,.m4a,.wav,.aac,audio/*">
 
 <script>
   let aCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -64,47 +62,107 @@
   let sT = 0, eT = 0, fade = 0, isP = false, pStart = 0, offset = 0;
   const sk = document.getElementById('sk');
 
+  // iOSの無音制限を解除する関数
+  function unlockAudio() {
+    if (aCtx.state === 'suspended') {
+      aCtx.resume();
+      document.getElementById('rf').innerText = "READY";
+    }
+  }
+
   document.getElementById('file-in').onchange = async (e) => {
     const file = e.target.files[0];
     if(!file) return;
     document.getElementById('rf').innerText = "DECODING...";
-    const arrayBuffer = await file.arrayBuffer();
-    aBuf = await aCtx.decodeAudioData(arrayBuffer);
-    sk.max = aBuf.duration;
-    eT = aBuf.duration;
-    updateInfo();
+    
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      aBuf = await aCtx.decodeAudioData(arrayBuffer);
+      sk.max = aBuf.duration;
+      eT = aBuf.duration;
+      offset = 0;
+      updateInfo();
+    } catch (err) {
+      document.getElementById('rf').innerText = "ERROR: LOAD FAILED";
+    }
   };
 
   function pp() {
     if (!aBuf) return;
-    if (isP) { sNode.stop(); isP = false; } 
-    else {
-      sNode = aCtx.createBufferSource(); sNode.buffer = aBuf; sNode.connect(aCtx.destination);
-      // 再生位置の決定
-      if (offset >= eT || offset < sT) offset = sT;
+    unlockAudio();
+    if (isP) { 
+      sNode.stop(); 
+      isP = false; 
+    } else {
+      sNode = aCtx.createBufferSource();
+      sNode.buffer = aBuf;
+      sNode.connect(aCtx.destination);
+      
+      // 再生位置を調整
+      if (offset >= eT) offset = sT;
       pStart = aCtx.currentTime;
+      
       sNode.start(0, offset, Math.max(0, eT - offset));
       isP = true;
+      
       const tick = () => {
         if (!isP) return;
         let now = aCtx.currentTime - pStart + offset;
-        sk.value = now;
         updateTimeDisplay(now);
-        if (now >= eT) { pp(); offset = sT; } else { requestAnimationFrame(tick); }
+        if (now >= eT) { 
+          pp(); 
+          offset = sT; 
+          updateTimeDisplay(sT);
+        } else { 
+          requestAnimationFrame(tick); 
+        }
       };
       tick();
-      sNode.onended = () => isP = false;
+      sNode.onended = () => { isP = false; };
     }
   }
 
-  function skip(v) { offset = Math.min(aBuf.duration, Math.max(0, offset + v)); updateTimeDisplay(offset); }
+  function manualSeek(v) {
+    let wasPlaying = isP;
+    if (isP) pp();
+    offset = parseFloat(v);
+    updateTimeDisplay(offset);
+    if (wasPlaying) pp();
+  }
+
+  function skip(v) { 
+    let wasPlaying = isP;
+    if (isP) pp();
+    offset = Math.min(aBuf.duration, Math.max(0, offset + v)); 
+    updateTimeDisplay(offset);
+    if (wasPlaying) pp();
+  }
+
   function adj(t, v) { if(t == 's') sT = Math.max(0, sT + v); else eT = Math.min(aBuf.duration, eT + v); updateInfo(); }
-  function st(t) { let now = isP ? aCtx.currentTime - pStart + offset : offset; if(t=='s') sT = now; else eT = now; updateInfo(); }
+  function st(t) { 
+    let now = isP ? aCtx.currentTime - pStart + offset : offset; 
+    if(t=='s') sT = now; else eT = now; 
+    updateInfo(); 
+  }
   function backToStart() { if(isP) pp(); offset = sT; updateTimeDisplay(sT); }
   function previewEnd() { if(isP) pp(); offset = Math.max(sT, eT - 3); pp(); }
-  function setFade(v) { fade = v; document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active')); document.getElementById('f'+v).classList.add('active'); }
-  function updateInfo() { document.getElementById('rf').innerText = sT.toFixed(2) + " , " + eT.toFixed(2); updateTimeDisplay(isP ? aCtx.currentTime - pStart + offset : offset); }
-  function updateTimeDisplay(t) { let m = Math.floor(t/60), s = (t%60).toFixed(2); document.getElementById('tm').innerText = m+":"+s.padStart(5,'0'); sk.value = t; }
+  
+  function setFade(v) { 
+    fade = v; 
+    document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active')); 
+    document.getElementById('f'+v).classList.add('active'); 
+  }
+
+  function updateInfo() { 
+    document.getElementById('rf').innerText = sT.toFixed(2) + " , " + eT.toFixed(2); 
+    updateTimeDisplay(isP ? aCtx.currentTime - pStart + offset : offset); 
+  }
+
+  function updateTimeDisplay(t) { 
+    let m = Math.floor(t/60), s = (t%60).toFixed(2); 
+    document.getElementById('tm').innerText = m+":"+s.padStart(5,'0'); 
+    sk.value = t; 
+  }
 
   async function exportAudio() {
     if (!aBuf) return;
