@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.4.7</title>
+<title>Ringtone Ignition v1.4.8</title>
 <style>
   body { background:#121212; color:#eee; font-family:monospace; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; touch-action:none; }
   .panel { background:#1e1e1e; border:2px solid #333; padding:15px; border-radius:12px; width:90%; text-align:center; box-sizing:border-box; }
@@ -51,19 +51,20 @@
 
 <script>
   let aCtx = new (window.AudioContext || window.webkitAudioContext)();
-  let aBuf, sNode;
+  let aBuf, sNode, gNode;
   let sT = 0, eT = 0, fade = 0, isP = false, pStart = 0, offset = 0;
   const sk = document.getElementById('sk');
 
   function unlockAudio() { if (aCtx.state === 'suspended') aCtx.resume(); }
 
-  // 停止時に「現在の再生秒数」をoffsetに保存する
   function stopAudio() {
     if (sNode) {
       if (isP) offset = aCtx.currentTime - pStart + offset;
       try { sNode.stop(); } catch(e){}
       sNode.disconnect();
+      if(gNode) gNode.disconnect();
       sNode = null;
+      gNode = null;
     }
     isP = false;
   }
@@ -98,18 +99,30 @@
     if (isP) { 
       stopAudio(); 
     } else {
-      // 再生開始前にゴミを掃除（offsetは保存せず純粋に止める）
       if (sNode) { sNode.disconnect(); sNode = null; }
       
       sNode = aCtx.createBufferSource();
       sNode.buffer = aBuf;
-      sNode.connect(aCtx.destination);
       
-      // 再開位置のバリデーション
+      // 音量調節用のノード（GainNode）を追加
+      gNode = aCtx.createGain();
+      sNode.connect(gNode);
+      gNode.connect(aCtx.destination);
+      
       if (offset >= eT || offset < 0) offset = sT;
-      
       pStart = aCtx.currentTime;
-      sNode.start(0, offset, Math.max(0, eT - offset));
+      
+      // --- フェードアウトの試聴用スケジュール ---
+      const remainingTime = eT - offset;
+      if (fade > 0 && remainingTime > 0) {
+        // 現在の再生におけるフェード開始タイミングを計算
+        const fadeStartTime = Math.max(0, remainingTime - fade);
+        gNode.gain.setValueAtTime(1, pStart);
+        gNode.gain.setValueAtTime(1, pStart + fadeStartTime);
+        gNode.gain.linearRampToValueAtTime(0, pStart + remainingTime);
+      }
+      
+      sNode.start(0, offset, Math.max(0, remainingTime));
       isP = true;
       
       const tick = () => {
@@ -117,7 +130,7 @@
         let now = aCtx.currentTime - pStart + offset;
         updateTimeDisplay(now);
         if (now >= eT) { 
-          isP = false; // offset保存を防ぐためフラグを先に折る
+          isP = false;
           stopAudio(); 
           offset = sT; 
           updateTimeDisplay(sT); 
@@ -126,61 +139,30 @@
         }
       };
       tick();
-      sNode.onended = () => { if(isP) isP = false; };
     }
   }
 
-  function manualSeek(v) {
-    stopAudio();
-    offset = parseFloat(v);
-    updateTimeDisplay(offset);
-    // スライダーを離したときなどの挙動を安定させるため自動再生はさせない
-  }
-
-  function skip(v) { 
-    let wasP = isP;
-    stopAudio();
-    offset = Math.min(aBuf.duration, Math.max(0, offset + v)); 
-    updateTimeDisplay(offset);
-    if (wasP) pp();
-  }
-
+  function manualSeek(v) { stopAudio(); offset = parseFloat(v); updateTimeDisplay(offset); }
+  function skip(v) { let wasP = isP; stopAudio(); offset = Math.min(aBuf.duration, Math.max(0, offset + v)); updateTimeDisplay(offset); if (wasP) pp(); }
   function adj(t, v) { if(t == 's') sT = Math.max(0, sT + v); else eT = Math.min(aBuf.duration, eT + v); updateInfo(); }
-  
-  function st(t) { 
-    let now = isP ? aCtx.currentTime - pStart + offset : offset; 
-    if(t=='s') sT = now; else eT = now; 
-    updateInfo(); 
-  }
-
-  function backToStart() { 
-    stopAudio(); 
-    offset = sT; 
-    updateTimeDisplay(sT); 
-  }
-
-  function previewEnd() { 
-    stopAudio(); 
-    offset = Math.max(sT, eT - 3); 
-    pp(); 
-  }
+  function st(t) { let now = isP ? aCtx.currentTime - pStart + offset : offset; if(t=='s') sT = now; else eT = now; updateInfo(); }
+  function backToStart() { stopAudio(); offset = sT; updateTimeDisplay(sT); }
+  function previewEnd() { stopAudio(); offset = Math.max(sT, eT - 3); pp(); }
   
   function setFade(v) { 
     fade = v; 
     document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active')); 
     document.getElementById('f'+v).classList.add('active'); 
+    if (isP) { // 再生中にフェードを変えたら反映させるために一度止めて再開
+      let currentPos = aCtx.currentTime - pStart + offset;
+      stopAudio();
+      offset = currentPos;
+      pp();
+    }
   }
 
-  function updateInfo() { 
-    document.getElementById('rf').innerText = sT.toFixed(2) + " , " + eT.toFixed(2); 
-    updateTimeDisplay(isP ? aCtx.currentTime - pStart + offset : offset); 
-  }
-
-  function updateTimeDisplay(t) { 
-    let m = Math.floor(t/60), s = (t%60).toFixed(2); 
-    document.getElementById('tm').innerText = m+":"+s.padStart(5,'0'); 
-    sk.value = t; 
-  }
+  function updateInfo() { document.getElementById('rf').innerText = sT.toFixed(2) + " , " + eT.toFixed(2); updateTimeDisplay(isP ? aCtx.currentTime - pStart + offset : offset); }
+  function updateTimeDisplay(t) { let m = Math.floor(t/60), s = (t%60).toFixed(2); document.getElementById('tm').innerText = m+":"+s.padStart(5,'0'); sk.value = t; }
 
   async function exportAudio() {
     if (!aBuf) return;
@@ -190,7 +172,7 @@
     const src = oCtx.createBufferSource(); src.buffer = aBuf;
     const gain = oCtx.createGain();
     gain.gain.setValueAtTime(1, 0);
-    if (fade > 0) { gain.gain.setValueAtTime(1, dur - fade); gain.gain.linearRampToValueAtTime(0, dur); }
+    if (fade > 0) { gain.gain.setValueAtTime(1, Math.max(0, dur - fade)); gain.gain.linearRampToValueAtTime(0, dur); }
     src.connect(gain); gain.connect(oCtx.destination);
     src.start(0, sT, dur);
     const rendered = await oCtx.startRendering();
