@@ -3,55 +3,60 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.5.5</title>
+<title>Ringtone Ignition v1.5.7</title>
 <style>
-  /* iPhoneのシステム文字サイズ設定を無視してレイアウトを固定 */
   html { -webkit-text-size-adjust: 100%; }
+  body { background:#121212; color:#eee; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; margin:0; overflow:hidden; }
   
-  body { background:#121212; color:#eee; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; margin:0; touch-action:none; }
-  .panel { background:#1e1e1e; border:2px solid #333; padding:12px; border-radius:12px; width:94%; text-align:center; box-sizing:border-box; }
+  .panel { background:#1e1e1e; border:1px solid #333; padding:15px; border-radius:16px; width:92%; max-width:400px; text-align:center; box-sizing:border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
   
-  /* メインタイマーを少し大きく強調 */
-  .time { font-size:2.4rem; color:#0ff; font-weight:bold; margin-bottom:5px; text-shadow:0 0 10px #0ff; font-variant-numeric: tabular-nums; }
+  .time { font-size:2.8rem; color:#0ff; font-weight:bold; margin:10px 0; text-shadow:0 0 15px rgba(0,255,255,0.5); font-variant-numeric: tabular-nums; }
   
-  .info-area { margin-bottom:10px; min-height:3.5em; display:flex; flex-direction:column; justify-content:center; }
-  /* IN/OUTの秒数表示を大きく(0.8rem -> 0.95rem) */
-  .range-info { font-size:0.95rem; color:#f0f; font-weight:bold; letter-spacing: 0.02em; }
-  .alert-info { font-size:0.8rem; color:#ff4444; font-weight:bold; margin-top:4px; height:1.2em; }
+  .info-area { margin-bottom:15px; min-height:3.5em; }
+  .range-info { font-size:0.9rem; color:#f0f; font-weight:bold; opacity:0.9; }
+  .alert-info { font-size:0.8rem; color:#ff4444; font-weight:bold; margin-top:5px; height:1.2em; }
   
-  input[type=range] { width:100%; margin:15px 0; accent-color:#0ff; }
+  input[type=range] { width:100%; margin:15px 0; accent-color:#0ff; cursor:pointer; }
   
-  .btns { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
+  .grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+  
+  /* ボタン共通設定 */
   button { 
-    background:#333; color:#fff; border:1px solid #555; 
-    padding:10px 4px; border-radius:8px; font-weight:bold; 
-    font-size:13px; /* 基本サイズを11pxから13pxへ */
-    cursor:pointer; 
-    -webkit-tap-highlight-color:transparent;
-    box-sizing: border-box;
-    display: flex; align-items: center; justify-content: center;
-    min-height: 46px; /* ボタンの高さを少し出して押しやすく */
+    background:#2a2a2a; color:#fff; border:1px solid #444; 
+    border-radius:10px; font-weight:bold; font-size:14px; 
+    cursor:pointer; -webkit-tap-highlight-color:transparent;
+    transition: all 0.1s; display: flex; align-items: center; justify-content: center;
+    min-height: 48px; width: 100%;
   }
+  button:active { transform: scale(0.97); background:#444; }
 
-  .accent-in { background:#442244; color:#f0f; border-color:#f0f; flex: 1 1 30%; }
-  .accent-out { background:#224444; color:#0ff; border-color:#0ff; flex: 1 1 30%; }
-  
-  .large-btn { flex: 1 1 95% !important; font-size:15px; margin: 2px 0; }
-  .half-btn { flex: 1 1 48% !important; font-size:14px; }
-  .third-btn { flex: 1 1 30%; font-size:13px; }
+  /* 確定・微調整グループ */
+  .ctrl-box { display: flex; flex-direction: column; gap: 6px; }
+  .adj-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .adj-pair button { min-height: 40px; font-size: 11px; }
 
-  /* 一番下の決定ボタン */
-  .main { background:#006666; color:#fff; border-color:#0ff; flex:1 1 95%; font-size:18px; margin-top:10px; height:54px; }
-  .main:disabled { background:#222; color:#555; border-color:#444; cursor:not-allowed; }
+  /* カラーアクセント */
+  .accent-in { color:#f0f; border-color:rgba(255,0,255,0.5); background: rgba(255, 0, 255, 0.05); }
+  .accent-out { color:#0ff; border-color:rgba(0,255,255,0.5); background: rgba(0, 255, 255, 0.05); }
   
-  .f-btn { background:#333; border:1px solid #555; color:#888; flex: 1 1 30%; font-size:12px; }
-  .f-btn.active { background:#555; color:#fff; border-color:#fff; }
+  .full-width { grid-column: span 2; }
+  .play-btn { background: #333; border-color: #555; height: 52px; font-size: 16px; }
+  .jump-btn { min-height: 42px; font-size: 13px; margin-top: 2px; }
+
+  .main { background: linear-gradient(135deg, #006666, #004444); color:#fff; border:1px solid #0ff; font-size:18px; height:60px; margin-top:15px; box-shadow: 0 0 15px rgba(0,255,255,0.2); }
+  .main:disabled { background:#222; color:#555; border-color:#333; box-shadow:none; }
+  
+  .fade-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; width: 100%; }
+  .f-btn { font-size: 11px; min-height: 36px; color: #888; }
+  .f-btn.active { background:#444; color:#fff; border-color:#eee; }
+  
   #file-in { display:none; }
 </style>
 </head>
 <body onclick="unlockAudio()">
   <div class="panel">
-    <button onclick="unlockAudio(); document.getElementById('file-in').click()" style="width:100%; margin-bottom:12px; height:48px; background:#444; color:#0ff; border:1px solid #0ff; font-size:15px;">🎵 SELECT MUSIC</button>
+    <button onclick="unlockAudio(); document.getElementById('file-in').click()" style="height:48px; background:#333; color:#0ff; border-color:#0ff; margin-bottom:10px;">🎵 SELECT MUSIC</button>
+    
     <div id="tm" class="time">00:00.00</div>
     
     <div class="info-area">
@@ -61,33 +66,39 @@
 
     <input type="range" id="sk" value="0" step="0.01" oninput="manualSeek(this.value)">
     
-    <div class="btns">
-      <button class="third-btn" onclick="skip(-1)">-1s</button>
-      <button class="third-btn" onclick="pp()" style="background:#444;">PLAY/STOP</button>
-      <button class="third-btn" onclick="skip(1)">+1s</button>
+    <div class="grid-layout">
+      <button onclick="skip(-1)">-1s</button>
+      <button onclick="skip(1)">+1s</button>
+      <button class="full-width play-btn" onclick="pp()">PLAY / STOP</button>
       
-      <button class="accent-in half-btn" onclick="st('s')">SET START</button>
-      <button class="accent-in third-btn" onclick="adj('s',-0.1)">IN-0.1</button>
-      <button class="accent-in third-btn" onclick="adj('s',0.1)">IN+0.1</button>
-      
-      <button class="accent-in large-btn" onclick="backToStart()">⏮ STARTへ戻る</button>
-      
-      <button class="accent-out half-btn" onclick="st('e')">SET END</button>
-      <button class="accent-out third-btn" onclick="adj('e',-0.1)">OUT-0.1</button>
-      <button class="accent-out third-btn" onclick="adj('e',0.1)">OUT+0.1</button>
-      
-      <button class="accent-out large-btn" onclick="previewEnd()">⏭ END 3秒前再生</button>
-      
-      <div style="display:flex; width:100%; gap:6px; margin-top:6px;">
-        <button class="f-btn active" id="f0" onclick="setFade(0)">FADE:OFF</button>
-        <button class="f-btn" id="f2" onclick="setFade(2)">2s</button>
-        <button class="f-btn" id="f5" onclick="setFade(5)">5s</button>
+      <div class="ctrl-box">
+        <button class="accent-in" onclick="st('s')">SET START</button>
+        <div class="adj-pair">
+          <button class="accent-in" onclick="adj('s',-0.1)">-0.1</button>
+          <button class="accent-in" onclick="adj('s',0.1)">+0.1</button>
+        </div>
+        <button class="accent-in jump-btn" onclick="backToStart()">⏮ STARTへ</button>
       </div>
       
-      <button id="ig" class="main" onclick="exportAudio()">IGNITION</button>
+      <div class="ctrl-box">
+        <button class="accent-out" onclick="st('e')">SET END</button>
+        <div class="adj-pair">
+          <button class="accent-out" onclick="adj('e',-0.1)">-0.1</button>
+          <button class="accent-out" onclick="adj('e',0.1)">+0.1</button>
+        </div>
+        <button class="accent-out jump-btn" onclick="previewEnd()">⏭ END直前</button>
+      </div>
+
+      <div class="fade-group full-width">
+        <button class="f-btn active" id="f0" onclick="setFade(0)">FADE OFF</button>
+        <button class="f-btn" id="f2" onclick="setFade(2)">2s FADE</button>
+        <button class="f-btn" id="f5" onclick="setFade(5)">5s FADE</button>
+      </div>
+      
+      <button id="ig" class="main full-width" onclick="exportAudio()">IGNITION</button>
     </div>
   </div>
-  <input type="file" id="file-in" accept=".mp3,.m4a,.wav,.aac,audio/*">
+  <input type="file" id="file-in" accept="audio/*">
 
 <script>
   let aCtx = new (window.AudioContext || window.webkitAudioContext)();
