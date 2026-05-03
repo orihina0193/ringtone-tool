@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.5.7</title>
+<title>Ringtone Ignition v1.5.8</title>
 <style>
   html { -webkit-text-size-adjust: 100%; }
-  body { background:#121212; color:#eee; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; margin:0; overflow:hidden; }
+  body { background:#121212; color:#eee; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; margin:0; }
   
   .panel { background:#1e1e1e; border:1px solid #333; padding:15px; border-radius:16px; width:92%; max-width:400px; text-align:center; box-sizing:border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
   
@@ -20,7 +20,6 @@
   
   .grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
   
-  /* ボタン共通設定 */
   button { 
     background:#2a2a2a; color:#fff; border:1px solid #444; 
     border-radius:10px; font-weight:bold; font-size:14px; 
@@ -30,12 +29,10 @@
   }
   button:active { transform: scale(0.97); background:#444; }
 
-  /* 確定・微調整グループ */
   .ctrl-box { display: flex; flex-direction: column; gap: 6px; }
   .adj-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
   .adj-pair button { min-height: 40px; font-size: 11px; }
 
-  /* カラーアクセント */
   .accent-in { color:#f0f; border-color:rgba(255,0,255,0.5); background: rgba(255, 0, 255, 0.05); }
   .accent-out { color:#0ff; border-color:rgba(0,255,255,0.5); background: rgba(0, 255, 255, 0.05); }
   
@@ -98,7 +95,7 @@
       <button id="ig" class="main full-width" onclick="exportAudio()">IGNITION</button>
     </div>
   </div>
-  <input type="file" id="file-in" accept="audio/*">
+  <input type="file" id="file-in" accept="audio/*" onchange="loadFile(event)">
 
 <script>
   let aCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -119,7 +116,8 @@
     isP = false;
   }
 
-  document.getElementById('file-in').onchange = async (e) => {
+  // ファイル読み込み関数を独立させて確実に動かします
+  async function loadFile(e) {
     const file = e.target.files[0];
     if(!file) return;
     document.getElementById('range-val').innerText = "DECODING...";
@@ -136,8 +134,10 @@
       sk.max = aBuf.duration;
       sT = 0; eT = aBuf.duration; offset = 0;
       updateInfo();
-    } catch (err) { document.getElementById('range-val').innerText = "ERROR: LOAD FAILED"; }
-  };
+    } catch (err) { 
+      document.getElementById('range-val').innerText = "ERROR: LOAD FAILED"; 
+    }
+  }
 
   function pp() {
     if (!aBuf) return;
