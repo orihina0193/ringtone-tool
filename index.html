@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Ringtone Ignition v1.5.8</title>
+<title>Ringtone Ignition v1.5.9</title>
 <style>
   html { -webkit-text-size-adjust: 100%; }
   body { background:#121212; color:#eee; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; margin:0; }
@@ -52,12 +52,13 @@
 </head>
 <body onclick="unlockAudio()">
   <div class="panel">
+    <!-- ファイル選択ボタンのonclickを修正 -->
     <button onclick="unlockAudio(); document.getElementById('file-in').click()" style="height:48px; background:#333; color:#0ff; border-color:#0ff; margin-bottom:10px;">🎵 SELECT MUSIC</button>
     
     <div id="tm" class="time">00:00.00</div>
     
     <div class="info-area">
-      <div id="range-val" class="range-info">START: 0.00s / END: 0.00s</div>
+      <div id="range-val" class="range-info">SELECT FILE...</div>
       <div id="alert-msg" class="alert-info"></div>
     </div>
 
@@ -95,6 +96,7 @@
       <button id="ig" class="main full-width" onclick="exportAudio()">IGNITION</button>
     </div>
   </div>
+  <!-- 確実に読み込むためのinputタグ -->
   <input type="file" id="file-in" accept="audio/*" onchange="loadFile(event)">
 
 <script>
@@ -105,18 +107,7 @@
 
   function unlockAudio() { if (aCtx.state === 'suspended') aCtx.resume(); }
 
-  function stopAudio() {
-    if (sNode) {
-      if (isP) offset = aCtx.currentTime - pStart + offset;
-      try { sNode.stop(); } catch(e){}
-      sNode.disconnect();
-      if(gNode) gNode.disconnect();
-      sNode = null; gNode = null;
-    }
-    isP = false;
-  }
-
-  // ファイル読み込み関数を独立させて確実に動かします
+  // ファイル読み込み処理
   async function loadFile(e) {
     const file = e.target.files[0];
     if(!file) return;
@@ -137,6 +128,17 @@
     } catch (err) { 
       document.getElementById('range-val').innerText = "ERROR: LOAD FAILED"; 
     }
+  }
+
+  function stopAudio() {
+    if (sNode) {
+      if (isP) offset = aCtx.currentTime - pStart + offset;
+      try { sNode.stop(); } catch(e){}
+      sNode.disconnect();
+      if(gNode) gNode.disconnect();
+      sNode = null; gNode = null;
+    }
+    isP = false;
   }
 
   function pp() {
@@ -170,14 +172,15 @@
   }
 
   function manualSeek(v) { stopAudio(); offset = parseFloat(v); updateTimeDisplay(offset); }
-  function skip(v) { let wasP = isP; stopAudio(); offset = Math.min(aBuf.duration, Math.max(0, offset + v)); updateTimeDisplay(offset); if (wasP) pp(); }
-  function adj(t, v) { if(t == 's') sT = Math.max(0, sT + v); else eT = Math.min(aBuf.duration, eT + v); updateInfo(); }
-  function st(t) { let now = isP ? aCtx.currentTime - pStart + offset : offset; if(t=='s') sT = now; else eT = now; updateInfo(); }
+  function skip(v) { if(!aBuf) return; let wasP = isP; stopAudio(); offset = Math.min(aBuf.duration, Math.max(0, offset + v)); updateTimeDisplay(offset); if (wasP) pp(); }
+  function adj(t, v) { if(!aBuf) return; if(t == 's') sT = Math.max(0, sT + v); else eT = Math.min(aBuf.duration, eT + v); updateInfo(); }
+  function st(t) { if(!aBuf) return; let now = isP ? aCtx.currentTime - pStart + offset : offset; if(t=='s') sT = now; else eT = now; updateInfo(); }
   function backToStart() { stopAudio(); offset = sT; updateTimeDisplay(sT); }
   function previewEnd() { stopAudio(); offset = Math.max(sT, eT - 3); pp(); }
   function setFade(v) { fade = v; document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active')); document.getElementById('f'+v).classList.add('active'); if (isP) { let c = aCtx.currentTime - pStart + offset; stopAudio(); offset = c; pp(); } }
 
   function updateInfo() { 
+    if(!aBuf) return;
     const editLen = eT - sT;
     const rangeVal = document.getElementById('range-val');
     const alertMsg = document.getElementById('alert-msg');
